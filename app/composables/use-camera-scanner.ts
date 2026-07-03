@@ -206,7 +206,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
       return
     }
 
-    feedback.prepare()
+    void feedback.prepare()
     engine.arm()
     isArmed.value = true
   }
