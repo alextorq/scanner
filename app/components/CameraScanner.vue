@@ -30,7 +30,7 @@ const statusText = computed(() => {
     case 'starting-camera':
       return 'Запускаем камеру'
     case 'active':
-      return isArmed.value ? 'Ищем код для сканирования' : 'Камера анализирует кадр'
+      return isArmed.value ? 'Выполняем попытки сканирования' : 'Камера анализирует кадр'
     case 'error':
       return 'Камера недоступна'
     case 'closed':
@@ -40,7 +40,7 @@ const statusText = computed(() => {
 
 const helperText = computed(() => {
   if (isArmed.value) {
-    return 'Удерживайте код в рамке — результат добавится автоматически.'
+    return 'Удерживайте код в рамке до короткого звукового сигнала.'
   }
   if (isActive.value) {
     return 'Анализ работает постоянно. Нажмите «Сканировать», чтобы принять один код.'
@@ -105,11 +105,8 @@ const helperText = computed(() => {
           :aria-expanded="isPanelOpen"
           @click="toggle"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8.5 6 10 4h4l1.5 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5Z" />
-            <circle cx="12" cy="12.5" r="3.25" />
-          </svg>
-          <span>{{ isPanelOpen ? 'Закрыть' : 'Камера' }}</span>
+          <img src="/scanner-icon.png" alt="" aria-hidden="true">
+          <span>{{ isPanelOpen ? 'Закрыть' : 'Сканер' }}</span>
         </button>
 
         <button
@@ -122,7 +119,7 @@ const helperText = computed(() => {
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" />
           </svg>
-          <span>{{ isArmed ? 'Ожидание кода' : 'Сканировать' }}</span>
+          <span>{{ isArmed ? 'Сканирование…' : 'Сканировать' }}</span>
         </button>
       </div>
       <p>{{ helperText }}</p>
@@ -411,6 +408,12 @@ const helperText = computed(() => {
 
 .camera-toggle span {
   font-size: 0.62rem;
+}
+
+.camera-toggle img {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: contain;
 }
 
 .scan-trigger {

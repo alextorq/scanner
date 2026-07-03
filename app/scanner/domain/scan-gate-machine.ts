@@ -1,35 +1,65 @@
 import type { DetectedCode } from './scanner.types'
 
-export type ScanGateState = { value: 'waiting' } | { value: 'armed' }
+export type ScanGateState =
+  | { value: 'waiting' }
+  | { value: 'scanning'; attemptsRemaining: number }
 
 export type ScanGateEvent =
-  | { type: 'TRIGGER' }
+  | { type: 'TRIGGER'; attempts: number }
   | { type: 'CANCEL' }
-  | { type: 'CODE_DETECTED'; code: DetectedCode }
+  | { type: 'ATTEMPT_FINISHED'; code?: DetectedCode }
+
+export type ScanGateOutcome =
+  | { type: 'success'; code: DetectedCode }
+  | { type: 'failure' }
 
 export interface ScanGateTransition {
   state: ScanGateState
-  output?: DetectedCode
+  outcome?: ScanGateOutcome
 }
 
 export const initialScanGateState: ScanGateState = { value: 'waiting' }
 
-/** Автомат пропускает наружу ровно одно распознавание после нажатия. */
+/** Автомат ограничивает одну сессию заданным числом попыток распознавания. */
 export function transitionScanGate(
   state: ScanGateState,
   event: ScanGateEvent,
 ): ScanGateTransition {
   if (event.type === 'TRIGGER') {
-    return { state: { value: 'armed' } }
+    return {
+      state: {
+        value: 'scanning',
+        attemptsRemaining: Math.max(1, Math.floor(event.attempts)),
+      },
+    }
   }
 
   if (event.type === 'CANCEL') {
     return { state: initialScanGateState }
   }
 
-  if (state.value === 'armed') {
-    return { state: initialScanGateState, output: event.code }
+  if (state.value === 'waiting') {
+    return { state }
   }
 
-  return { state }
+  if (event.code) {
+    return {
+      state: initialScanGateState,
+      outcome: { type: 'success', code: event.code },
+    }
+  }
+
+  if (state.attemptsRemaining <= 1) {
+    return {
+      state: initialScanGateState,
+      outcome: { type: 'failure' },
+    }
+  }
+
+  return {
+    state: {
+      value: 'scanning',
+      attemptsRemaining: state.attemptsRemaining - 1,
+    },
+  }
 }

@@ -15,29 +15,68 @@ const code: DetectedCode = {
 }
 
 describe('автомат выдачи скана', () => {
-  it('не выдаёт код без нажатия', () => {
+  it('не учитывает попытку без нажатия', () => {
     const transition = transitionScanGate(initialScanGateState, {
-      type: 'CODE_DETECTED',
+      type: 'ATTEMPT_FINISHED',
       code,
     })
 
-    expect(transition.output).toBeUndefined()
+    expect(transition.outcome).toBeUndefined()
     expect(transition.state).toEqual({ value: 'waiting' })
   })
 
-  it('выдаёт первый код после нажатия и сразу закрывает затвор', () => {
-    const armed = transitionScanGate(initialScanGateState, { type: 'TRIGGER' }).state
-    const scanned = transitionScanGate(armed, { type: 'CODE_DETECTED', code })
-    const repeated = transitionScanGate(scanned.state, { type: 'CODE_DETECTED', code })
+  it('запускает заданное число попыток', () => {
+    const transition = transitionScanGate(initialScanGateState, {
+      type: 'TRIGGER',
+      attempts: 6,
+    })
 
-    expect(scanned.output).toBe(code)
-    expect(scanned.state).toEqual({ value: 'waiting' })
-    expect(repeated.output).toBeUndefined()
+    expect(transition.state).toEqual({ value: 'scanning', attemptsRemaining: 6 })
   })
 
-  it('сбрасывает ожидание при отмене', () => {
-    const armed = transitionScanGate(initialScanGateState, { type: 'TRIGGER' }).state
+  it('уменьшает счётчик после пустой попытки', () => {
+    const scanning = transitionScanGate(initialScanGateState, {
+      type: 'TRIGGER',
+      attempts: 3,
+    }).state
+    const transition = transitionScanGate(scanning, { type: 'ATTEMPT_FINISHED' })
 
-    expect(transitionScanGate(armed, { type: 'CANCEL' }).state).toEqual({ value: 'waiting' })
+    expect(transition.state).toEqual({ value: 'scanning', attemptsRemaining: 2 })
+    expect(transition.outcome).toBeUndefined()
+  })
+
+  it('сразу успешно завершает сессию при найденном коде', () => {
+    const scanning = transitionScanGate(initialScanGateState, {
+      type: 'TRIGGER',
+      attempts: 3,
+    }).state
+    const transition = transitionScanGate(scanning, {
+      type: 'ATTEMPT_FINISHED',
+      code,
+    })
+
+    expect(transition.state).toEqual({ value: 'waiting' })
+    expect(transition.outcome).toEqual({ type: 'success', code })
+  })
+
+  it('завершает сессию неудачей после последней пустой попытки', () => {
+    const scanning = transitionScanGate(initialScanGateState, {
+      type: 'TRIGGER',
+      attempts: 1,
+    }).state
+    const transition = transitionScanGate(scanning, { type: 'ATTEMPT_FINISHED' })
+
+    expect(transition.state).toEqual({ value: 'waiting' })
+    expect(transition.outcome).toEqual({ type: 'failure' })
+  })
+
+  it('сбрасывает сканирование при отмене', () => {
+    const scanning = transitionScanGate(initialScanGateState, {
+      type: 'TRIGGER',
+      attempts: 3,
+    }).state
+
+    expect(transitionScanGate(scanning, { type: 'CANCEL' }).state)
+      .toEqual({ value: 'waiting' })
   })
 })

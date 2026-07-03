@@ -36,10 +36,12 @@ export interface BarcodeDecoder {
 
 export interface ScannerConfiguration {
   analysisIntervalMs: number
+  scanAttempts: number
 }
 
 export const DEFAULT_SCANNER_CONFIGURATION: ScannerConfiguration = {
   analysisIntervalMs: 160,
+  scanAttempts: 6,
 }
 
 /**

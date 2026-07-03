@@ -32,6 +32,7 @@ describe('движок сканера', () => {
     const engine = new ScannerEngine(decoder, {
       onDetected,
       onScan,
+      onScanFailed: vi.fn(),
       onError: vi.fn(),
     })
 
@@ -47,8 +48,9 @@ describe('движок сканера', () => {
     const engine = new ScannerEngine(decoder, {
       onDetected: vi.fn(),
       onScan,
+      onScanFailed: vi.fn(),
       onError: vi.fn(),
-    }, { analysisIntervalMs: 100 }, () => new Date('2026-07-03T10:20:30.000Z'))
+    }, { analysisIntervalMs: 100, scanAttempts: 6 }, () => new Date('2026-07-03T10:20:30.000Z'))
 
     engine.arm()
     await engine.analyze(frame, 0)
@@ -71,8 +73,9 @@ describe('движок сканера', () => {
     const engine = new ScannerEngine(createDecoder(decode), {
       onDetected: vi.fn(),
       onScan: vi.fn(),
+      onScanFailed: vi.fn(),
       onError: vi.fn(),
-    }, { analysisIntervalMs: 0 })
+    }, { analysisIntervalMs: 0, scanAttempts: 6 })
 
     const first = engine.analyze(frame, 0)
     const second = engine.analyze(frame, 1)
@@ -87,8 +90,9 @@ describe('движок сканера', () => {
     const engine = new ScannerEngine(createDecoder(decode), {
       onDetected: vi.fn(),
       onScan: vi.fn(),
+      onScanFailed: vi.fn(),
       onError: vi.fn(),
-    }, { analysisIntervalMs: 160 })
+    }, { analysisIntervalMs: 160, scanAttempts: 6 })
 
     await engine.analyze(frame, 0)
     await engine.analyze(frame, 100)
@@ -106,13 +110,56 @@ describe('движок сканера', () => {
     const engine = new ScannerEngine(createDecoder(decode), {
       onDetected,
       onScan: vi.fn(),
+      onScanFailed: vi.fn(),
       onError,
-    }, { analysisIntervalMs: 0 })
+    }, { analysisIntervalMs: 0, scanAttempts: 6 })
 
     await engine.analyze(frame, 0)
     await engine.analyze(frame, 1)
 
     expect(onError).toHaveBeenCalledTimes(1)
     expect(onDetected).toHaveBeenCalledWith(code)
+  })
+
+  it('завершает сканирование неудачей после всех пустых попыток', async () => {
+    const onScanFailed = vi.fn()
+    const engine = new ScannerEngine(createDecoder(vi.fn().mockResolvedValue([])), {
+      onDetected: vi.fn(),
+      onScan: vi.fn(),
+      onScanFailed,
+      onError: vi.fn(),
+    }, { analysisIntervalMs: 0, scanAttempts: 3 })
+
+    engine.arm()
+    await engine.analyze(frame, 0)
+    await engine.analyze(frame, 1)
+    await engine.analyze(frame, 2)
+
+    expect(onScanFailed).toHaveBeenCalledTimes(1)
+    expect(engine.isArmed).toBe(false)
+  })
+
+  it('не принимает результат кадра, анализ которого начался до нажатия', async () => {
+    let finishDecoding: ((codes: DetectedCode[]) => void) | undefined
+    const decode = vi.fn()
+      .mockImplementationOnce(() => new Promise<DetectedCode[]>((resolve) => {
+        finishDecoding = resolve
+      }))
+      .mockResolvedValueOnce([code])
+    const onScan = vi.fn()
+    const engine = new ScannerEngine(createDecoder(decode), {
+      onDetected: vi.fn(),
+      onScan,
+      onScanFailed: vi.fn(),
+      onError: vi.fn(),
+    }, { analysisIntervalMs: 0, scanAttempts: 3 })
+
+    const oldFrame = engine.analyze(frame, 0)
+    engine.arm()
+    finishDecoding?.([code])
+    await oldFrame
+    await engine.analyze(frame, 1)
+
+    expect(onScan).toHaveBeenCalledTimes(1)
   })
 })

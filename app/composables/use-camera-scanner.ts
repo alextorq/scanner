@@ -9,6 +9,7 @@ import {
   type CameraState,
 } from '../scanner/domain/camera-machine'
 import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
+import { ScannerAudioFeedback } from '../scanner/infrastructure/scanner-audio-feedback'
 import { WorkerBarcodeDecoder } from '../scanner/infrastructure/worker-decoder'
 
 const MAX_FRAME_EDGE = 1024
@@ -45,6 +46,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
   const isArmed = ref(false)
   const detectedCode = shallowRef<DetectedCode | null>(null)
   const analysisError = ref('')
+  const feedback = new ScannerAudioFeedback()
 
   let stream: MediaStream | null = null
   let engine: ScannerEngine | null = null
@@ -132,7 +134,12 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
       },
       onScan: (result) => {
         isArmed.value = false
+        feedback.success()
         emitScan(result)
+      },
+      onScanFailed: () => {
+        isArmed.value = false
+        feedback.failure()
       },
       onError: (error) => {
         analysisError.value = error instanceof Error
@@ -199,6 +206,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
       return
     }
 
+    feedback.prepare()
     engine.arm()
     isArmed.value = true
   }
@@ -244,7 +252,10 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
     }
   }
 
-  onBeforeUnmount(close)
+  onBeforeUnmount(() => {
+    close()
+    feedback.dispose()
+  })
 
   return {
     video,

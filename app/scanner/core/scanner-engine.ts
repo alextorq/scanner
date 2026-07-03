@@ -11,6 +11,7 @@ import {
 export interface ScannerEngineCallbacks {
   onDetected(code: DetectedCode): void
   onScan(result: ScanResult): void
+  onScanFailed(): void
   onError(error: unknown): void
 }
 
@@ -19,6 +20,7 @@ export class ScannerEngine {
   private decoding = false
   private disposed = false
   private lastAnalysisAt = Number.NEGATIVE_INFINITY
+  private scanGeneration = 0
 
   constructor(
     private readonly decoder: BarcodeDecoder,
@@ -28,14 +30,19 @@ export class ScannerEngine {
   ) {}
 
   get isArmed(): boolean {
-    return this.gateState.value === 'armed'
+    return this.gateState.value === 'scanning'
   }
 
   arm(): void {
-    this.gateState = transitionScanGate(this.gateState, { type: 'TRIGGER' }).state
+    this.scanGeneration += 1
+    this.gateState = transitionScanGate(this.gateState, {
+      type: 'TRIGGER',
+      attempts: this.configuration.scanAttempts,
+    }).state
   }
 
   cancel(): void {
+    this.scanGeneration += 1
     this.gateState = transitionScanGate(this.gateState, { type: 'CANCEL' }).state
   }
 
@@ -52,31 +59,49 @@ export class ScannerEngine {
 
     this.decoding = true
     this.lastAnalysisAt = timestamp
+    const scanGeneration = this.scanGeneration
 
     try {
       const codes = await this.decoder.decode(frame)
       const code = codes[0]
-      if (!code || this.disposed) {
+      if (this.disposed) {
         return
       }
 
-      this.callbacks.onDetected(code)
-      const transition = transitionScanGate(this.gateState, { type: 'CODE_DETECTED', code })
-      this.gateState = transition.state
-
-      if (transition.output) {
-        this.callbacks.onScan({
-          value: transition.output.value,
-          format: transition.output.format,
-          scannedAt: this.now().toISOString(),
-        })
+      if (code) {
+        this.callbacks.onDetected(code)
       }
+
+      this.finishScanAttempt(code, scanGeneration)
     } catch (error) {
       if (!this.disposed) {
         this.callbacks.onError(error)
+        this.finishScanAttempt(undefined, scanGeneration)
       }
     } finally {
       this.decoding = false
+    }
+  }
+
+  private finishScanAttempt(code: DetectedCode | undefined, scanGeneration: number): void {
+    if (scanGeneration !== this.scanGeneration) {
+      return
+    }
+
+    const transition = transitionScanGate(this.gateState, {
+      type: 'ATTEMPT_FINISHED',
+      ...(code ? { code } : {}),
+    })
+    this.gateState = transition.state
+
+    if (transition.outcome?.type === 'success') {
+      this.callbacks.onScan({
+        value: transition.outcome.code.value,
+        format: transition.outcome.code.format,
+        scannedAt: this.now().toISOString(),
+      })
+    } else if (transition.outcome?.type === 'failure') {
+      this.callbacks.onScanFailed()
     }
   }
 
