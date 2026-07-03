@@ -1,0 +1,52 @@
+:root {
+  --page: #f4f1ea;
+  --surface: #fffdf8;
+  --ink: #1d211e;
+  --muted: #747872;
+  --line: #dcd9d0;
+  --line-strong: #c8c5bb;
+  --accent: #ff795f;
+  --accent-dark: #9b3828;
+  --accent-soft: #ffe5de;
+  --shadow-small: 0 0.35rem 1.25rem rgb(41 42 38 / 6%);
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  color: var(--ink);
+  background: var(--page);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  min-height: 100%;
+  background: var(--page);
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(circle at 110% 2%, rgb(255 121 95 / 11%), transparent 18rem),
+    var(--page);
+}
+
+button {
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+button:focus-visible {
+  outline: 3px solid rgb(255 121 95 / 38%);
+  outline-offset: 2px;
+}
