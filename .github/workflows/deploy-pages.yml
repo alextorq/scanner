@@ -41,6 +41,31 @@ jobs:
       - name: Generate static SPA
         run: npm run generate
 
+      - name: Ensure Cloudflare Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          project_url="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/flat-wave-d403"
+          status="$(curl --silent --show-error \
+            --output /tmp/cloudflare-pages-project.json \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "${project_url}")"
+
+          if [[ "${status}" == "404" ]]; then
+            curl --silent --show-error --fail-with-body \
+              --output /dev/null \
+              --request POST \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"flat-wave-d403","production_branch":"main"}' \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
+          elif [[ "${status}" != "200" ]]; then
+            echo "Cloudflare project lookup failed with HTTP ${status}"
+            exit 1
+          fi
+
       - name: Deploy
         uses: cloudflare/wrangler-action@v4
         with:
