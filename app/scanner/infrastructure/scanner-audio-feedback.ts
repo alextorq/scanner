@@ -15,12 +15,18 @@ interface AudioFeedbackDependencies {
   createAudio: () => HTMLAudioElement
   createObjectUrl: (blob: Blob) => string
   revokeObjectUrl: (url: string) => void
+  configureSession: () => void
 }
 
 const DEFAULT_DEPENDENCIES: AudioFeedbackDependencies = {
   createAudio: () => new Audio(),
   createObjectUrl: blob => URL.createObjectURL(blob),
   revokeObjectUrl: url => URL.revokeObjectURL(url),
+  configureSession: () => {
+    if (navigator.audioSession) {
+      navigator.audioSession.type = 'playback'
+    }
+  },
 }
 
 export class ScannerAudioFeedback {
@@ -32,10 +38,12 @@ export class ScannerAudioFeedback {
   constructor(private readonly dependencies: AudioFeedbackDependencies = DEFAULT_DEPENDENCIES) {}
 
   prepare(): Promise<boolean> {
+    this.dependencies.configureSession()
     const audio = this.getAudio()
     this.clearPauseTimer()
     audio.pause()
     audio.currentTime = 0
+    audio.load()
 
     const preparation = audio.play()
       .then(() => true)
@@ -79,6 +87,8 @@ export class ScannerAudioFeedback {
     this.audioUrl = this.dependencies.createObjectUrl(createFeedbackWav())
     audio.preload = 'auto'
     audio.src = this.audioUrl
+    audio.muted = false
+    audio.volume = 1
     this.audio = audio
     return audio
   }

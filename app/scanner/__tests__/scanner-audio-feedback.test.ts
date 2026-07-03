@@ -15,6 +15,8 @@ function createAudioMock() {
     currentTime: 0,
     preload: '',
     src: '',
+    muted: true,
+    volume: 0,
     get paused() {
       return paused
     },
@@ -32,23 +34,32 @@ function createAudioMock() {
 }
 
 function createFeedback(audio: HTMLAudioElement) {
-  return new ScannerAudioFeedback({
-    createAudio: () => audio,
-    createObjectUrl: () => 'blob:scanner-sounds',
-    revokeObjectUrl: vi.fn(),
-  })
+  const configureSession = vi.fn()
+  return {
+    feedback: new ScannerAudioFeedback({
+      createAudio: () => audio,
+      createObjectUrl: () => 'blob:scanner-sounds',
+      revokeObjectUrl: vi.fn(),
+      configureSession,
+    }),
+    configureSession,
+  }
 }
 
 describe('звуковая обратная связь сканера', () => {
   it('начинает аудиопоток непосредственно при нажатии', async () => {
     const audio = createAudioMock()
-    const feedback = createFeedback(audio)
+    const { feedback, configureSession } = createFeedback(audio)
 
     const prepared = await feedback.prepare()
 
     expect(audio.src).toBe('blob:scanner-sounds')
     expect(audio.currentTime).toBe(0)
+    expect(audio.muted).toBe(false)
+    expect(audio.volume).toBe(1)
+    expect(audio.load).toHaveBeenCalledTimes(1)
     expect(audio.play).toHaveBeenCalledTimes(1)
+    expect(configureSession).toHaveBeenCalledTimes(1)
     expect(prepared).toBe(true)
     feedback.dispose()
   })
@@ -56,7 +67,7 @@ describe('звуковая обратная связь сканера', () => {
   it('перематывает активный поток на положительный сигнал', async () => {
     vi.useFakeTimers()
     const audio = createAudioMock()
-    const feedback = createFeedback(audio)
+    const { feedback } = createFeedback(audio)
     await feedback.prepare()
 
     feedback.success()
@@ -70,7 +81,7 @@ describe('звуковая обратная связь сканера', () => {
 
   it('перематывает активный поток на отрицательный сигнал', async () => {
     const audio = createAudioMock()
-    const feedback = createFeedback(audio)
+    const { feedback } = createFeedback(audio)
     await feedback.prepare()
 
     feedback.failure()
