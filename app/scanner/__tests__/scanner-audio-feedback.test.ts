@@ -1,76 +1,93 @@
-import { describe, expect, it, vi } from 'vitest'
-import { ScannerAudioFeedback } from '../infrastructure/scanner-audio-feedback'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  AUDIO_CUE_OFFSETS,
+  createFeedbackWav,
+  ScannerAudioFeedback,
+} from '../infrastructure/scanner-audio-feedback'
 
-function createAudioContextMock(initialState: AudioContextState = 'suspended') {
-  let state = initialState
-  const unlockSource = {
-    buffer: null,
-    connect: vi.fn(),
-    start: vi.fn(),
-  }
-  const oscillator = {
-    type: 'sine',
-    frequency: {
-      setValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-    },
-    connect: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }
-  const gain = {
-    gain: {
-      setValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-    },
-    connect: vi.fn(),
-  }
-  const context = {
-    get state() {
-      return state
-    },
-    currentTime: 1,
-    sampleRate: 48000,
-    destination: {},
-    createBuffer: vi.fn(() => ({})),
-    createBufferSource: vi.fn(() => unlockSource),
-    createOscillator: vi.fn(() => oscillator),
-    createGain: vi.fn(() => gain),
-    resume: vi.fn(async () => {
-      state = 'running'
-    }),
-    close: vi.fn(async () => {
-      state = 'closed'
-    }),
-  } as unknown as AudioContext
+afterEach(() => {
+  vi.useRealTimers()
+})
 
-  return { context, unlockSource, oscillator }
+function createAudioMock() {
+  let paused = true
+  const audio = {
+    currentTime: 0,
+    preload: '',
+    src: '',
+    get paused() {
+      return paused
+    },
+    play: vi.fn(async () => {
+      paused = false
+    }),
+    pause: vi.fn(() => {
+      paused = true
+    }),
+    load: vi.fn(),
+    removeAttribute: vi.fn(),
+  } as unknown as HTMLAudioElement
+
+  return audio
+}
+
+function createFeedback(audio: HTMLAudioElement) {
+  return new ScannerAudioFeedback({
+    createAudio: () => audio,
+    createObjectUrl: () => 'blob:scanner-sounds',
+    revokeObjectUrl: vi.fn(),
+  })
 }
 
 describe('звуковая обратная связь сканера', () => {
-  it('разблокирует контекст внутри пользовательского действия', async () => {
-    const { context, unlockSource } = createAudioContextMock()
-    const feedback = new ScannerAudioFeedback(() => context)
+  it('начинает аудиопоток непосредственно при нажатии', async () => {
+    const audio = createAudioMock()
+    const feedback = createFeedback(audio)
 
     const prepared = await feedback.prepare()
 
-    expect(context.createBuffer).toHaveBeenCalledWith(1, 1, 48000)
-    expect(unlockSource.connect).toHaveBeenCalledWith(context.destination)
-    expect(unlockSource.start).toHaveBeenCalledTimes(1)
-    expect(context.resume).toHaveBeenCalledTimes(1)
+    expect(audio.src).toBe('blob:scanner-sounds')
+    expect(audio.currentTime).toBe(0)
+    expect(audio.play).toHaveBeenCalledTimes(1)
     expect(prepared).toBe(true)
+    feedback.dispose()
   })
 
-  it('ожидает активный контекст перед положительным сигналом', async () => {
-    const { context, oscillator } = createAudioContextMock()
-    const feedback = new ScannerAudioFeedback(() => context)
+  it('перематывает активный поток на положительный сигнал', async () => {
+    vi.useFakeTimers()
+    const audio = createAudioMock()
+    const feedback = createFeedback(audio)
+    await feedback.prepare()
 
     feedback.success()
     await Promise.resolve()
+
+    expect(audio.currentTime).toBe(AUDIO_CUE_OFFSETS.success)
+    expect(audio.play).toHaveBeenCalledTimes(1)
+    vi.runAllTimers()
+    expect(audio.pause).toHaveBeenCalled()
+  })
+
+  it('перематывает активный поток на отрицательный сигнал', async () => {
+    const audio = createAudioMock()
+    const feedback = createFeedback(audio)
+    await feedback.prepare()
+
+    feedback.failure()
     await Promise.resolve()
 
-    expect(context.resume).toHaveBeenCalledTimes(1)
-    expect(oscillator.start).toHaveBeenCalledTimes(1)
-    expect(oscillator.stop).toHaveBeenCalledTimes(1)
+    expect(audio.currentTime).toBe(AUDIO_CUE_OFFSETS.failure)
+    feedback.dispose()
+  })
+
+  it('создаёт валидный WAV-файл со звуковыми данными', async () => {
+    const wav = createFeedbackWav()
+    const bytes = new Uint8Array(await wav.arrayBuffer())
+    const header = new TextDecoder().decode(bytes.slice(0, 4))
+    const hasAudibleSamples = bytes.slice(44).some(value => value !== 0)
+
+    expect(wav.type).toBe('audio/wav')
+    expect(header).toBe('RIFF')
+    expect(hasAudibleSamples).toBe(true)
   })
 })
