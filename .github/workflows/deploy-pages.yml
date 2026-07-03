@@ -46,5 +46,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy .output/public --project-name=scanner --branch=main
+          command: pages deploy .output/public --project-name=flat-wave-d403 --branch=main
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}

@@ -30,7 +30,7 @@ npm run generate
 Push в ветку `main` запускает `.github/workflows/deploy-pages.yml`, который
 публикует этот каталог в Cloudflare Pages. Репозиторию нужны GitHub Actions
 secrets `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`; Pages-проект должен
-называться `scanner`, а его production branch — `main`.
+называться `flat-wave-d403`, а его production branch — `main`.
 
 ## Проверки
 
