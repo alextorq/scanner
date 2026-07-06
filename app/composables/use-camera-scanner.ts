@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, type Ref } from 'vue'
 import { calculateCoverCrop, fitWithin } from '../scanner/core/frame-geometry'
 import { ScannerEngine } from '../scanner/core/scanner-engine'
+import { stabilizeDetectedCode } from '../scanner/core/detected-code-stabilizer'
 import {
   initialCameraState,
   mapCameraError,
@@ -13,6 +14,7 @@ import { ScannerAudioFeedback } from '../scanner/infrastructure/scanner-audio-fe
 import { WorkerBarcodeDecoder } from '../scanner/infrastructure/worker-decoder'
 
 const MAX_FRAME_EDGE = 1024
+const DETECTION_HOLD_MS = 600
 
 const CAMERA_ERRORS: Record<CameraErrorReason, string> = {
   'permission-denied': 'Доступ к камере запрещён. Разрешите его в настройках браузера.',
@@ -52,6 +54,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
   let engine: ScannerEngine | null = null
   let animationFrameId = 0
   let operationId = 0
+  let detectionClearTimer: ReturnType<typeof setTimeout> | null = null
 
   const isPanelOpen = computed(() => state.value.value !== 'closed')
   const isActive = computed(() => state.value.value === 'active')
@@ -130,7 +133,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
   function createEngine(emitScan: (result: ScanResult) => void): ScannerEngine {
     return new ScannerEngine(new WorkerBarcodeDecoder(), {
       onDetected: (code) => {
-        detectedCode.value = code
+        updateDetectedCode(code)
       },
       onScan: (result) => {
         isArmed.value = false
@@ -214,6 +217,7 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
   function close(): void {
     operationId += 1
     releaseResources()
+    clearDetectionTimer()
     detectedCode.value = null
     analysisError.value = ''
     isArmed.value = false
@@ -249,6 +253,30 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
     if (stream) {
       stopTracks(stream)
       stream = null
+    }
+  }
+
+  function updateDetectedCode(code: DetectedCode | null): void {
+    if (code) {
+      clearDetectionTimer()
+      detectedCode.value = stabilizeDetectedCode(detectedCode.value, code)
+      return
+    }
+
+    if (!detectedCode.value || detectionClearTimer !== null) {
+      return
+    }
+
+    detectionClearTimer = setTimeout(() => {
+      detectedCode.value = null
+      detectionClearTimer = null
+    }, DETECTION_HOLD_MS)
+  }
+
+  function clearDetectionTimer(): void {
+    if (detectionClearTimer !== null) {
+      clearTimeout(detectionClearTimer)
+      detectionClearTimer = null
     }
   }
 

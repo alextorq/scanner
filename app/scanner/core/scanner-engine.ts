@@ -9,7 +9,7 @@ import {
 } from '../domain/scanner.types'
 
 export interface ScannerEngineCallbacks {
-  onDetected(code: DetectedCode): void
+  onDetected(code: DetectedCode | null): void
   onScan(result: ScanResult): void
   onScanFailed(): void
   onError(error: unknown): void
@@ -68,13 +68,12 @@ export class ScannerEngine {
         return
       }
 
-      if (code) {
-        this.callbacks.onDetected(code)
-      }
+      this.callbacks.onDetected(code ?? null)
 
       this.finishScanAttempt(code, scanGeneration)
     } catch (error) {
       if (!this.disposed) {
+        this.callbacks.onDetected(null)
         this.callbacks.onError(error)
         this.finishScanAttempt(undefined, scanGeneration)
       }

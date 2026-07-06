@@ -42,6 +42,25 @@ describe('движок сканера', () => {
     expect(onScan).not.toHaveBeenCalled()
   })
 
+  it('убирает обнаружение, когда в следующем кадре кода больше нет', async () => {
+    const onDetected = vi.fn()
+    const decoder = createDecoder(vi.fn()
+      .mockResolvedValueOnce([code])
+      .mockResolvedValueOnce([]))
+    const engine = new ScannerEngine(decoder, {
+      onDetected,
+      onScan: vi.fn(),
+      onScanFailed: vi.fn(),
+      onError: vi.fn(),
+    }, { analysisIntervalMs: 0, scanAttempts: 6 })
+
+    await engine.analyze(frame, 0)
+    await engine.analyze(frame, 1)
+
+    expect(onDetected).toHaveBeenNthCalledWith(1, code)
+    expect(onDetected).toHaveBeenNthCalledWith(2, null)
+  })
+
   it('после нажатия выдаёт ровно один результат', async () => {
     const onScan = vi.fn()
     const decoder = createDecoder(vi.fn().mockResolvedValue([code]))

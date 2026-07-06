@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type CSSProperties } from 'vue'
 import { useCameraScanner } from '../composables/use-camera-scanner'
+import { getCodeOverlayCorners } from '../scanner/core/code-overlay-geometry'
 import type { ScanResult } from '../scanner/domain/scanner.types'
 
 const emit = defineEmits<{
@@ -47,6 +48,37 @@ const helperText = computed(() => {
   }
   return 'Включите камеру, затем используйте кнопку сканирования.'
 })
+
+const detectionOverlay = computed(() => {
+  const code = detectedCode.value
+  const canvasElement = canvas.value
+
+  if (!code || !canvasElement || canvasElement.width <= 0 || canvasElement.height <= 0) {
+    return null
+  }
+
+  const { width, height } = canvasElement
+  const corners = getCodeOverlayCorners(code, { width, height })
+  const clampX = (value: number) => Math.min(width, Math.max(0, value))
+  const clampY = (value: number) => Math.min(height, Math.max(0, value))
+  const centerX = corners.reduce((sum, point) => sum + point.x, 0) / corners.length
+  const top = Math.min(...corners.map(point => point.y))
+  const bottom = Math.max(...corners.map(point => point.y))
+  const placeLabelAbove = bottom > height * 0.82
+  const labelY = placeLabelAbove
+    ? Math.max(8, top - height * 0.025)
+    : Math.min(height - 8, bottom + height * 0.025)
+
+  return {
+    viewBox: `0 0 ${width} ${height}`,
+    points: corners.map(point => `${clampX(point.x)},${clampY(point.y)}`).join(' '),
+    labelStyle: {
+      left: `${clampX(centerX) / width * 100}%`,
+      top: `${labelY / height * 100}%`,
+      transform: placeLabelAbove ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+    } satisfies CSSProperties,
+  }
+})
 </script>
 
 <template>
@@ -85,10 +117,19 @@ const helperText = computed(() => {
             <span v-if="isArmed" />
           </div>
 
-          <div v-if="detectedCode && isActive" class="detection-badge">
-            <span />
-            {{ detectedCode.format }} в кадре
-          </div>
+          <template v-if="detectedCode && detectionOverlay && isActive">
+            <svg
+              class="detection-overlay"
+              :viewBox="detectionOverlay.viewBox"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon :points="detectionOverlay.points" />
+            </svg>
+            <div class="detection-value" :style="detectionOverlay.labelStyle">
+              {{ detectedCode.value }}
+            </div>
+          </template>
         </div>
 
         <p v-if="analysisError" class="analysis-error">
@@ -319,30 +360,44 @@ const helperText = computed(() => {
   border-color: var(--accent);
 }
 
-.detection-badge {
+.detection-overlay {
   position: absolute;
-  bottom: 0.75rem;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  max-width: calc(100% - 2rem);
-  padding: 0.42rem 0.65rem;
-  color: #f7f5f0;
-  border-radius: 999px;
-  background: rgb(15 18 16 / 76%);
-  font-size: 0.66rem;
-  font-weight: 700;
-  transform: translateX(-50%);
-  backdrop-filter: blur(0.5rem);
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.detection-badge span {
-  width: 0.38rem;
-  height: 0.38rem;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #7fdd9a;
+.detection-overlay polygon {
+  fill: rgb(127 221 154 / 10%);
+  stroke: #7fdd9a;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 0.3rem rgb(127 221 154 / 65%));
+}
+
+.detection-value {
+  position: absolute;
+  z-index: 3;
+  max-width: calc(100% - 2rem);
+  overflow: hidden;
+  padding: 0.4rem 0.6rem;
+  color: #f7f5f0;
+  border: 1px solid rgb(127 221 154 / 55%);
+  border-radius: 0.55rem;
+  background: rgb(15 18 16 / 84%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(0.5rem);
+  pointer-events: none;
+  transition: top 180ms ease-out, left 180ms ease-out;
 }
 
 .analysis-error {
