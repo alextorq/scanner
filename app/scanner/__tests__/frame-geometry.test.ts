@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { calculateCoverCrop, fitWithin } from '../core/frame-geometry'
+import {
+  calculateCoverCrop,
+  calculateRelativeRegion,
+  fitWithin,
+  FOCUS_REGION,
+  translateCodePosition,
+} from '../core/frame-geometry'
 
 describe('геометрия видеокадра', () => {
   it('обрезает широкий источник по бокам', () => {
@@ -31,5 +37,26 @@ describe('геометрия видеокадра', () => {
   it('не увеличивает небольшой кадр', () => {
     expect(fitWithin({ width: 640, height: 480 }, 1024))
       .toEqual({ width: 640, height: 480 })
+  })
+
+  it('вычисляет область анализа по статической фокусной рамке', () => {
+    const region = calculateRelativeRegion({ width: 1024, height: 768 }, FOCUS_REGION)
+
+    expect(region).toEqual({ x: 113, y: 138, width: 798, height: 492 })
+    expect(region.width * region.height).toBeLessThan(1024 * 768 * 0.51)
+  })
+
+  it('возвращает координаты к системе полного кадра', () => {
+    expect(translateCodePosition({
+      topLeft: { x: 0, y: 0 },
+      topRight: { x: 100, y: 0 },
+      bottomLeft: { x: 0, y: 50 },
+      bottomRight: { x: 100, y: 50 },
+    }, { x: 113, y: 138 })).toEqual({
+      topLeft: { x: 113, y: 138 },
+      topRight: { x: 213, y: 138 },
+      bottomLeft: { x: 113, y: 188 },
+      bottomRight: { x: 213, y: 188 },
+    })
   })
 })

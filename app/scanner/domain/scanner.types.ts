@@ -27,6 +27,8 @@ export interface PixelFrame {
   data: Uint8ClampedArray
   width: number
   height: number
+  originX?: number
+  originY?: number
 }
 
 export interface BarcodeDecoder {
@@ -40,7 +42,7 @@ export interface ScannerConfiguration {
 }
 
 export const DEFAULT_SCANNER_CONFIGURATION: ScannerConfiguration = {
-  analysisIntervalMs: 160,
+  analysisIntervalMs: 110,
   scanAttempts: 6,
 }
 

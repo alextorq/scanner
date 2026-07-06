@@ -1,4 +1,5 @@
 import type { BarcodeDecoder, DetectedCode, PixelFrame } from '../domain/scanner.types'
+import { translateCodePosition } from '../core/frame-geometry'
 
 interface WorkerResponse {
   requestId: number
@@ -9,6 +10,8 @@ interface WorkerResponse {
 interface PendingRequest {
   resolve: (codes: DetectedCode[]) => void
   reject: (error: Error) => void
+  originX: number
+  originY: number
 }
 
 export class WorkerBarcodeDecoder implements BarcodeDecoder {
@@ -34,7 +37,12 @@ export class WorkerBarcodeDecoder implements BarcodeDecoder {
     const requestId = this.nextRequestId++
 
     return new Promise((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject })
+      this.pending.set(requestId, {
+        resolve,
+        reject,
+        originX: frame.originX ?? 0,
+        originY: frame.originY ?? 0,
+      })
       this.worker.postMessage(
         { requestId, frame },
         [frame.data.buffer],
@@ -68,7 +76,13 @@ export class WorkerBarcodeDecoder implements BarcodeDecoder {
       return
     }
 
-    request.resolve(event.data.codes ?? [])
+    request.resolve((event.data.codes ?? []).map(code => ({
+      ...code,
+      position: translateCodePosition(code.position, {
+        x: request.originX,
+        y: request.originY,
+      }),
+    })))
   }
 
   private readonly handleWorkerError = (event: ErrorEvent): void => {

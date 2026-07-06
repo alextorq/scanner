@@ -1,5 +1,10 @@
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, type Ref } from 'vue'
-import { calculateCoverCrop, fitWithin } from '../scanner/core/frame-geometry'
+import {
+  calculateCoverCrop,
+  calculateRelativeRegion,
+  fitWithin,
+  FOCUS_REGION,
+} from '../scanner/core/frame-geometry'
 import { ScannerEngine } from '../scanner/core/scanner-engine'
 import { stabilizeDetectedCode } from '../scanner/core/detected-code-stabilizer'
 import {
@@ -9,7 +14,7 @@ import {
   type CameraErrorReason,
   type CameraState,
 } from '../scanner/domain/camera-machine'
-import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
+import type { DetectedCode, PixelFrame, ScanResult } from '../scanner/domain/scanner.types'
 import { ScannerAudioFeedback } from '../scanner/infrastructure/scanner-audio-feedback'
 import { WorkerBarcodeDecoder } from '../scanner/infrastructure/worker-decoder'
 
@@ -196,7 +201,20 @@ export function useCameraScanner(onScan: (result: ScanResult) => void): CameraSc
       )
 
       if (currentEngine.canAcceptFrame(timestamp)) {
-        const frame = context.getImageData(0, 0, output.width, output.height)
+        const region = calculateRelativeRegion(output, FOCUS_REGION)
+        const imageData = context.getImageData(
+          region.x,
+          region.y,
+          region.width,
+          region.height,
+        )
+        const frame: PixelFrame = {
+          data: imageData.data,
+          width: imageData.width,
+          height: imageData.height,
+          originX: region.x,
+          originY: region.y,
+        }
         void currentEngine.analyze(frame, timestamp)
       }
     }

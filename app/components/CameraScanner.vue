@@ -6,10 +6,17 @@ import {
   detectedCodePositionDistance,
   interpolateDetectedCode,
 } from '../scanner/core/detected-code-stabilizer'
+import { FOCUS_REGION } from '../scanner/core/frame-geometry'
 import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
 
 const OVERLAY_ANIMATION_TIME_MS = 65
 const OVERLAY_STOP_DISTANCE_PX = 0.35
+const focusRegionStyle = {
+  '--focus-top': `${FOCUS_REGION.y * 100}%`,
+  '--focus-right': `${(1 - FOCUS_REGION.x - FOCUS_REGION.width) * 100}%`,
+  '--focus-bottom': `${(1 - FOCUS_REGION.y - FOCUS_REGION.height) * 100}%`,
+  '--focus-left': `${FOCUS_REGION.x * 100}%`,
+} satisfies CSSProperties
 
 const emit = defineEmits<{
   scan: [result: ScanResult]
@@ -184,7 +191,12 @@ onBeforeUnmount(stopOverlayAnimation)
             </template>
           </div>
 
-          <div v-if="isActive" class="target-frame" aria-hidden="true">
+          <div
+            v-if="isActive"
+            class="target-frame"
+            :style="focusRegionStyle"
+            aria-hidden="true"
+          >
             <i /><i /><i /><i />
             <span v-if="isArmed" />
           </div>
@@ -378,7 +390,7 @@ onBeforeUnmount(stopOverlayAnimation)
 
 .target-frame {
   position: absolute;
-  inset: 18% 11%;
+  inset: var(--focus-top) var(--focus-right) var(--focus-bottom) var(--focus-left);
 }
 
 .target-frame i {
