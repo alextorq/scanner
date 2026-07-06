@@ -9,6 +9,24 @@ const MATRIX_SYMBOLOGIES = new Set([
   'QRCode',
 ])
 
+const LINEAR_HEIGHT_RATIOS: Record<string, number> = {
+  EANUPC: 0.7,
+  EAN13: 0.7,
+  ISBN: 0.7,
+  UPCA: 0.7,
+  EAN8: 0.8,
+  UPCE: 0.8,
+  DataBar: 0.4,
+  Code39: 0.35,
+  Code93: 0.32,
+  Codabar: 0.32,
+  ITF: 0.32,
+  Code128: 0.3,
+  Telepen: 0.3,
+}
+
+const DEFAULT_LINEAR_HEIGHT_RATIO = 0.3
+
 /**
  * ZXing can locate a linear barcode from only a few successful scan lines.
  * In that case its quadrilateral has almost no height, so expand it around
@@ -63,9 +81,12 @@ export function getCodeOverlayCorners(code: DetectedCode, frame: FrameSize): Poi
   const maxAcross = Math.max(...projections.map(point => point.across))
   const detectedHeight = maxAcross - minAcross
   const detectedWidth = maxAlong - minAlong
+  const heightRatio = LINEAR_HEIGHT_RATIOS[code.format]
+    ?? LINEAR_HEIGHT_RATIOS[code.symbology]
+    ?? DEFAULT_LINEAR_HEIGHT_RATIO
   const minimumHeight = Math.min(
-    frame.height * 0.24,
-    Math.max(frame.height * 0.1, detectedWidth * 0.28),
+    frame.height * 0.38,
+    Math.max(frame.height * 0.08, detectedWidth * heightRatio),
   )
 
   if (detectedHeight >= minimumHeight) {
