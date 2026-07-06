@@ -493,6 +493,10 @@ const detectionOverlay = computed(() => {
 }
 
 .scanner-dock > p {
+  display: flex;
+  min-height: 2.7em;
+  align-items: center;
+  justify-content: center;
   margin: 0.55rem 0 0;
   color: var(--muted);
   font-size: 0.66rem;
