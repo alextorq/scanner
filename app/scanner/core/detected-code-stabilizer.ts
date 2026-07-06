@@ -50,3 +50,50 @@ export function stabilizeDetectedCode(
 
   return changed ? { ...next, position } : previous
 }
+
+/** Interpolates the visible overlay independently from the decoder cadence. */
+export function interpolateDetectedCode(
+  current: DetectedCode,
+  target: DetectedCode,
+  progress: number,
+): DetectedCode {
+  if (current.value !== target.value || current.format !== target.format) {
+    return target
+  }
+
+  const amount = Math.min(1, Math.max(0, progress))
+  const interpolatePoint = (from: Point, to: Point): Point => ({
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  })
+
+  return {
+    ...target,
+    position: {
+      topLeft: interpolatePoint(current.position.topLeft, target.position.topLeft),
+      topRight: interpolatePoint(current.position.topRight, target.position.topRight),
+      bottomLeft: interpolatePoint(current.position.bottomLeft, target.position.bottomLeft),
+      bottomRight: interpolatePoint(current.position.bottomRight, target.position.bottomRight),
+    },
+  }
+}
+
+export function detectedCodePositionDistance(
+  current: DetectedCode,
+  target: DetectedCode,
+): number {
+  if (current.value !== target.value || current.format !== target.format) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  return Math.max(
+    pointDistance(current.position.topLeft, target.position.topLeft),
+    pointDistance(current.position.topRight, target.position.topRight),
+    pointDistance(current.position.bottomLeft, target.position.bottomLeft),
+    pointDistance(current.position.bottomRight, target.position.bottomRight),
+  )
+}
+
+function pointDistance(first: Point, second: Point): number {
+  return Math.hypot(second.x - first.x, second.y - first.y)
+}

@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { computed, type CSSProperties } from 'vue'
+import { computed, onBeforeUnmount, shallowRef, watch, type CSSProperties } from 'vue'
 import { useCameraScanner } from '../composables/use-camera-scanner'
 import { getCodeOverlayCorners } from '../scanner/core/code-overlay-geometry'
-import type { ScanResult } from '../scanner/domain/scanner.types'
+import {
+  detectedCodePositionDistance,
+  interpolateDetectedCode,
+} from '../scanner/core/detected-code-stabilizer'
+import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
+
+const OVERLAY_ANIMATION_TIME_MS = 65
+const OVERLAY_STOP_DISTANCE_PX = 0.35
 
 const emit = defineEmits<{
   scan: [result: ScanResult]
@@ -23,6 +30,30 @@ const {
   scan,
   close,
 } = useCameraScanner(result => emit('scan', result))
+
+const displayedCode = shallowRef<DetectedCode | null>(null)
+let overlayTarget: DetectedCode | null = null
+let overlayAnimationFrame = 0
+let lastOverlayAnimationAt = 0
+
+watch(detectedCode, (code) => {
+  overlayTarget = code
+
+  if (!code) {
+    stopOverlayAnimation()
+    displayedCode.value = null
+    return
+  }
+
+  const displayed = displayedCode.value
+  if (!displayed || displayed.value !== code.value || displayed.format !== code.format) {
+    stopOverlayAnimation()
+    displayedCode.value = code
+    return
+  }
+
+  requestOverlayAnimation()
+}, { immediate: true })
 
 const statusText = computed(() => {
   switch (state.value.value) {
@@ -50,7 +81,7 @@ const helperText = computed(() => {
 })
 
 const detectionOverlay = computed(() => {
-  const code = detectedCode.value
+  const code = displayedCode.value
   const canvasElement = canvas.value
 
   if (!code || !canvasElement || canvasElement.width <= 0 || canvasElement.height <= 0) {
@@ -79,6 +110,47 @@ const detectionOverlay = computed(() => {
     } satisfies CSSProperties,
   }
 })
+
+function requestOverlayAnimation(): void {
+  if (overlayAnimationFrame === 0) {
+    overlayAnimationFrame = requestAnimationFrame(animateOverlay)
+  }
+}
+
+function animateOverlay(timestamp: number): void {
+  overlayAnimationFrame = 0
+  const current = displayedCode.value
+  const target = overlayTarget
+
+  if (!current || !target) {
+    lastOverlayAnimationAt = 0
+    return
+  }
+
+  const elapsed = lastOverlayAnimationAt === 0
+    ? 1000 / 60
+    : Math.min(50, timestamp - lastOverlayAnimationAt)
+  lastOverlayAnimationAt = timestamp
+  const progress = 1 - Math.exp(-elapsed / OVERLAY_ANIMATION_TIME_MS)
+  const next = interpolateDetectedCode(current, target, progress)
+
+  if (detectedCodePositionDistance(next, target) <= OVERLAY_STOP_DISTANCE_PX) {
+    displayedCode.value = target
+    lastOverlayAnimationAt = 0
+    return
+  }
+
+  displayedCode.value = next
+  requestOverlayAnimation()
+}
+
+function stopOverlayAnimation(): void {
+  cancelAnimationFrame(overlayAnimationFrame)
+  overlayAnimationFrame = 0
+  lastOverlayAnimationAt = 0
+}
+
+onBeforeUnmount(stopOverlayAnimation)
 </script>
 
 <template>
@@ -117,7 +189,7 @@ const detectionOverlay = computed(() => {
             <span v-if="isArmed" />
           </div>
 
-          <template v-if="detectedCode && detectionOverlay && isActive">
+          <template v-if="displayedCode && detectionOverlay && isActive">
             <svg
               class="detection-overlay"
               :viewBox="detectionOverlay.viewBox"
@@ -127,7 +199,7 @@ const detectionOverlay = computed(() => {
               <polygon :points="detectionOverlay.points" />
             </svg>
             <div class="detection-value" :style="detectionOverlay.labelStyle">
-              {{ detectedCode.value }}
+              {{ displayedCode.value }}
             </div>
           </template>
         </div>
@@ -397,7 +469,6 @@ const detectionOverlay = computed(() => {
   white-space: nowrap;
   backdrop-filter: blur(0.5rem);
   pointer-events: none;
-  transition: top 180ms ease-out, left 180ms ease-out;
 }
 
 .analysis-error {

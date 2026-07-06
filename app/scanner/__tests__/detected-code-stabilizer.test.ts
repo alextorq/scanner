@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { stabilizeDetectedCode } from '../core/detected-code-stabilizer'
+import {
+  detectedCodePositionDistance,
+  interpolateDetectedCode,
+  stabilizeDetectedCode,
+} from '../core/detected-code-stabilizer'
 import type { DetectedCode } from '../domain/scanner.types'
 
 function createCode(value: string, offset: number): DetectedCode {
@@ -54,5 +58,25 @@ describe('стабилизация положения кода', () => {
     const next = createCode('same', 200)
 
     expect(stabilizeDetectedCode(createCode('same', 0), next).position).toEqual(next.position)
+  })
+})
+
+describe('плавное отображение положения кода', () => {
+  it('интерполирует все углы рамки', () => {
+    const interpolated = interpolateDetectedCode(
+      createCode('same', 0),
+      createCode('same', 40),
+      0.25,
+    )
+
+    expect(interpolated.position.topLeft).toEqual({ x: 110, y: 110 })
+    expect(interpolated.position.bottomRight).toEqual({ x: 310, y: 190 })
+  })
+
+  it('измеряет максимальное оставшееся перемещение', () => {
+    expect(detectedCodePositionDistance(
+      createCode('same', 0),
+      createCode('same', 3),
+    )).toBeCloseTo(Math.hypot(3, 3))
   })
 })
