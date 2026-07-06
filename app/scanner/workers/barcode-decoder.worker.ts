@@ -20,7 +20,7 @@ interface DecodeResponse {
 
 const options: ReaderOptions = {
   formats: [...DEFAULT_BARCODE_FORMATS],
-  maxNumberOfSymbols: 1,
+  maxNumberOfSymbols: 0,
   tryHarder: true,
   tryRotate: true,
   tryInvert: true,
