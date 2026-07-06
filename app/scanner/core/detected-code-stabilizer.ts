@@ -1,10 +1,18 @@
 import type { DetectedCode, Point } from '../domain/scanner.types'
 
-const SLOW_SMOOTHING_FACTOR = 0.35
-const FAST_SMOOTHING_FACTOR = 0.7
-const DEAD_ZONE_PX = 6
-const FAST_DISTANCE_PX = 40
-const SNAP_DISTANCE_PX = 100
+const SLOW_SMOOTHING_FACTOR = 0.55
+const FAST_SMOOTHING_FACTOR = 0.85
+const DEAD_ZONE_PX = 5
+const FAST_DISTANCE_PX = 30
+const SNAP_DISTANCE_PX = 80
+const LINEAR_ACROSS_SMOOTHING_FACTOR = 0.18
+const MATRIX_SYMBOLOGIES = new Set([
+  'Aztec',
+  'DataMatrix',
+  'MaxiCode',
+  'PDF417',
+  'QRCode',
+])
 
 /** Reduces frame-to-frame locator noise without losing large real movements. */
 export function stabilizeDetectedCode(
@@ -16,6 +24,7 @@ export function stabilizeDetectedCode(
   }
 
   let changed = false
+  const axis = barcodeAxis(previous)
   const stabilizePoint = (previousPoint: Point, nextPoint: Point): Point => {
     const distance = Math.hypot(
       nextPoint.x - previousPoint.x,
@@ -31,10 +40,28 @@ export function stabilizeDetectedCode(
       return nextPoint
     }
 
-    const smoothingFactor = distance >= FAST_DISTANCE_PX
+    const alongDistance = (nextPoint.x - previousPoint.x) * axis.x
+      + (nextPoint.y - previousPoint.y) * axis.y
+    const smoothingFactor = Math.abs(alongDistance) >= FAST_DISTANCE_PX
       ? FAST_SMOOTHING_FACTOR
       : SLOW_SMOOTHING_FACTOR
     changed = true
+
+    if (!MATRIX_SYMBOLOGIES.has(next.symbology)) {
+      const normal = { x: -axis.y, y: axis.x }
+      const acrossDistance = (nextPoint.x - previousPoint.x) * normal.x
+        + (nextPoint.y - previousPoint.y) * normal.y
+
+      return {
+        x: previousPoint.x
+          + axis.x * alongDistance * smoothingFactor
+          + normal.x * acrossDistance * LINEAR_ACROSS_SMOOTHING_FACTOR,
+        y: previousPoint.y
+          + axis.y * alongDistance * smoothingFactor
+          + normal.y * acrossDistance * LINEAR_ACROSS_SMOOTHING_FACTOR,
+      }
+    }
+
     return {
       x: previousPoint.x + (nextPoint.x - previousPoint.x) * smoothingFactor,
       y: previousPoint.y + (nextPoint.y - previousPoint.y) * smoothingFactor,
@@ -96,4 +123,13 @@ export function detectedCodePositionDistance(
 
 function pointDistance(first: Point, second: Point): number {
   return Math.hypot(second.x - first.x, second.y - first.y)
+}
+
+function barcodeAxis(code: DetectedCode): Point {
+  const { topLeft, topRight, bottomLeft, bottomRight } = code.position
+  const x = ((topRight.x - topLeft.x) + (bottomRight.x - bottomLeft.x)) / 2
+  const y = ((topRight.y - topLeft.y) + (bottomRight.y - bottomLeft.y)) / 2
+  const length = Math.hypot(x, y)
+
+  return length >= 1 ? { x: x / length, y: y / length } : { x: 1, y: 0 }
 }

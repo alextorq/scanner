@@ -9,7 +9,7 @@ import {
 import { FOCUS_REGION } from '../scanner/core/frame-geometry'
 import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
 
-const OVERLAY_ANIMATION_TIME_MS = 65
+const OVERLAY_ANIMATION_TIME_MS = 40
 const OVERLAY_STOP_DISTANCE_PX = 0.35
 const focusRegionStyle = {
   '--focus-top': `${FOCUS_REGION.y * 100}%`,
@@ -201,19 +201,24 @@ onBeforeUnmount(stopOverlayAnimation)
             <span v-if="isArmed" />
           </div>
 
-          <template v-if="displayedCode && detectionOverlay && isActive">
-            <svg
-              class="detection-overlay"
-              :viewBox="detectionOverlay.viewBox"
-              preserveAspectRatio="none"
-              aria-hidden="true"
+          <Transition name="detection">
+            <div
+              v-if="displayedCode && detectionOverlay && isActive"
+              class="detection-layer"
             >
-              <polygon :points="detectionOverlay.points" />
-            </svg>
-            <div class="detection-value" :style="detectionOverlay.labelStyle">
-              {{ displayedCode.value }}
+              <svg
+                class="detection-overlay"
+                :viewBox="detectionOverlay.viewBox"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <polygon :points="detectionOverlay.points" />
+              </svg>
+              <div class="detection-value" :style="detectionOverlay.labelStyle">
+                {{ displayedCode.value }}
+              </div>
             </div>
-          </template>
+          </Transition>
         </div>
 
         <p v-if="analysisError" class="analysis-error">
@@ -444,14 +449,30 @@ onBeforeUnmount(stopOverlayAnimation)
   border-color: var(--accent);
 }
 
-.detection-overlay {
+.detection-layer {
   position: absolute;
   z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.detection-overlay {
+  position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
   pointer-events: none;
+}
+
+.detection-enter-active,
+.detection-leave-active {
+  transition: opacity 120ms ease-out;
+}
+
+.detection-enter-from,
+.detection-leave-to {
+  opacity: 0;
 }
 
 .detection-overlay polygon {

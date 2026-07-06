@@ -41,8 +41,8 @@ describe('стабилизация положения кода', () => {
       createCode('same', 50),
     )
 
-    expect(stabilized.position.topLeft).toEqual({ x: 135, y: 135 })
-    expect(stabilized.position.bottomRight).toEqual({ x: 335, y: 215 })
+    expect(stabilized.position.topLeft).toEqual({ x: 142.5, y: 109 })
+    expect(stabilized.position.bottomRight).toEqual({ x: 342.5, y: 189 })
   })
 
   it('мягче сглаживает небольшое перемещение', () => {
@@ -51,7 +51,7 @@ describe('стабилизация положения кода', () => {
       createCode('same', 10),
     )
 
-    expect(stabilized.position.topLeft).toEqual({ x: 103.5, y: 103.5 })
+    expect(stabilized.position.topLeft).toEqual({ x: 105.5, y: 101.8 })
   })
 
   it('не задерживает очень большое перемещение', () => {

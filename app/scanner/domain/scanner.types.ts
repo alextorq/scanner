@@ -39,11 +39,19 @@ export interface BarcodeDecoder {
 export interface ScannerConfiguration {
   analysisIntervalMs: number
   scanAttempts: number
+  adaptiveAnalysis?: boolean
+  minAnalysisIntervalMs?: number
+  maxAnalysisIntervalMs?: number
+  targetDecodeLoad?: number
 }
 
 export const DEFAULT_SCANNER_CONFIGURATION: ScannerConfiguration = {
-  analysisIntervalMs: 110,
+  analysisIntervalMs: 80,
   scanAttempts: 6,
+  adaptiveAnalysis: true,
+  minAnalysisIntervalMs: 45,
+  maxAnalysisIntervalMs: 220,
+  targetDecodeLoad: 0.75,
 }
 
 /**

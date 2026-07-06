@@ -120,6 +120,60 @@ describe('движок сканера', () => {
     expect(decode).toHaveBeenCalledTimes(2)
   })
 
+  it('ускоряет анализ после быстрого декодирования', async () => {
+    let clock = 0
+    const decode = vi.fn(async () => {
+      clock += 30
+      return []
+    })
+    const engine = new ScannerEngine(createDecoder(decode), {
+      onDetected: vi.fn(),
+      onScan: vi.fn(),
+      onScanFailed: vi.fn(),
+      onError: vi.fn(),
+    }, {
+      analysisIntervalMs: 80,
+      scanAttempts: 6,
+      adaptiveAnalysis: true,
+      minAnalysisIntervalMs: 45,
+      maxAnalysisIntervalMs: 220,
+      targetDecodeLoad: 0.75,
+    }, () => new Date(), () => clock)
+
+    await engine.analyze(frame, 0)
+
+    expect(engine.analysisIntervalMs).toBe(45)
+    expect(engine.canAcceptFrame(44)).toBe(false)
+    expect(engine.canAcceptFrame(45)).toBe(true)
+  })
+
+  it('снижает частоту анализа на медленном устройстве', async () => {
+    let clock = 0
+    const decode = vi.fn(async () => {
+      clock += 150
+      return []
+    })
+    const engine = new ScannerEngine(createDecoder(decode), {
+      onDetected: vi.fn(),
+      onScan: vi.fn(),
+      onScanFailed: vi.fn(),
+      onError: vi.fn(),
+    }, {
+      analysisIntervalMs: 80,
+      scanAttempts: 6,
+      adaptiveAnalysis: true,
+      minAnalysisIntervalMs: 45,
+      maxAnalysisIntervalMs: 220,
+      targetDecodeLoad: 0.75,
+    }, () => new Date(), () => clock)
+
+    await engine.analyze(frame, 0)
+
+    expect(engine.analysisIntervalMs).toBe(200)
+    expect(engine.canAcceptFrame(199)).toBe(false)
+    expect(engine.canAcceptFrame(200)).toBe(true)
+  })
+
   it('передаёт ошибку декодера и продолжает работу', async () => {
     const onError = vi.fn()
     const decode = vi.fn()

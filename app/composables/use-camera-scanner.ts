@@ -19,7 +19,7 @@ import { ScannerAudioFeedback } from '../scanner/infrastructure/scanner-audio-fe
 import { WorkerBarcodeDecoder } from '../scanner/infrastructure/worker-decoder'
 
 const MAX_FRAME_EDGE = 1024
-const DETECTION_HOLD_MS = 600
+const DETECTION_HOLD_MS = 300
 
 const CAMERA_ERRORS: Record<CameraErrorReason, string> = {
   'permission-denied': 'Доступ к камере запрещён. Разрешите его в настройках браузера.',
