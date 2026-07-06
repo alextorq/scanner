@@ -31,14 +31,23 @@ describe('стабилизация положения кода', () => {
     expect(stabilizeDetectedCode(previous, createCode('same', 3))).toBe(previous)
   })
 
-  it('плавно приближает рамку к новому положению', () => {
+  it('быстро приближает рамку при заметном перемещении', () => {
     const stabilized = stabilizeDetectedCode(
       createCode('same', 0),
       createCode('same', 50),
     )
 
-    expect(stabilized.position.topLeft).toEqual({ x: 110, y: 110 })
-    expect(stabilized.position.bottomRight).toEqual({ x: 310, y: 190 })
+    expect(stabilized.position.topLeft).toEqual({ x: 135, y: 135 })
+    expect(stabilized.position.bottomRight).toEqual({ x: 335, y: 215 })
+  })
+
+  it('мягче сглаживает небольшое перемещение', () => {
+    const stabilized = stabilizeDetectedCode(
+      createCode('same', 0),
+      createCode('same', 10),
+    )
+
+    expect(stabilized.position.topLeft).toEqual({ x: 103.5, y: 103.5 })
   })
 
   it('не задерживает очень большое перемещение', () => {

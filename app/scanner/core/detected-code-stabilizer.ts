@@ -1,8 +1,10 @@
 import type { DetectedCode, Point } from '../domain/scanner.types'
 
-const SMOOTHING_FACTOR = 0.2
-const DEAD_ZONE_PX = 5
-const SNAP_DISTANCE_PX = 140
+const SLOW_SMOOTHING_FACTOR = 0.35
+const FAST_SMOOTHING_FACTOR = 0.7
+const DEAD_ZONE_PX = 6
+const FAST_DISTANCE_PX = 40
+const SNAP_DISTANCE_PX = 100
 
 /** Reduces frame-to-frame locator noise without losing large real movements. */
 export function stabilizeDetectedCode(
@@ -29,10 +31,13 @@ export function stabilizeDetectedCode(
       return nextPoint
     }
 
+    const smoothingFactor = distance >= FAST_DISTANCE_PX
+      ? FAST_SMOOTHING_FACTOR
+      : SLOW_SMOOTHING_FACTOR
     changed = true
     return {
-      x: previousPoint.x + (nextPoint.x - previousPoint.x) * SMOOTHING_FACTOR,
-      y: previousPoint.y + (nextPoint.y - previousPoint.y) * SMOOTHING_FACTOR,
+      x: previousPoint.x + (nextPoint.x - previousPoint.x) * smoothingFactor,
+      y: previousPoint.y + (nextPoint.y - previousPoint.y) * smoothingFactor,
     }
   }
 
