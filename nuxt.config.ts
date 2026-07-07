@@ -7,7 +7,11 @@ export default defineNuxtConfig({
       ignore: ['/404.html'],
     },
   },
-  css: ['~/assets/css/main.css'],
+  css: [
+    '~/assets/css/main.css',
+    '~/assets/css/app.css',
+    '~/assets/css/camera-scanner.css',
+  ],
   app: {
     head: {
       htmlAttrs: { lang: 'ru' },

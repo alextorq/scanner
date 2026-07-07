@@ -10,6 +10,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
+    "watch:dns": "node scripts/watch-dns.mjs",
     "postinstall": "nuxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
