@@ -1,7 +1,10 @@
 import {
   computed,
   defineComponent,
+  nextTick,
   onBeforeUnmount,
+  onMounted,
+  ref,
   shallowRef,
   Teleport,
   Transition,
@@ -9,6 +12,17 @@ import {
   type CSSProperties,
 } from 'vue'
 import { useCameraScanner } from '../composables/use-camera-scanner'
+import {
+  CAMERA_PANEL_EDGE_GAP,
+  CAMERA_PANEL_MIN_CONTROL_WIDTH,
+  clampCameraPanelRect,
+  getMinimumCameraPanelSizeFromFocus,
+  moveCameraPanelRect,
+  resizeCameraPanelRect,
+  type CameraPanelConstraints,
+  type CameraPanelRect,
+  type CameraPanelSize,
+} from '../scanner/core/camera-panel-layout'
 import { getCodeOverlayCorners } from '../scanner/core/code-overlay-geometry'
 import {
   detectedCodePositionDistance,
@@ -19,12 +33,26 @@ import type { DetectedCode, ScanResult } from '../scanner/domain/scanner.types'
 
 const OVERLAY_ANIMATION_TIME_MS = 40
 const OVERLAY_STOP_DISTANCE_PX = 0.35
+const KEYBOARD_PANEL_STEP_PX = 16
+const KEYBOARD_PANEL_FAST_STEP_PX = 48
+const FALLBACK_MINIMUM_PANEL_SIZE: CameraPanelSize = {
+  width: CAMERA_PANEL_MIN_CONTROL_WIDTH,
+  height: 220,
+}
 const focusRegionStyle = {
   '--focus-top': `${FOCUS_REGION.y * 100}%`,
   '--focus-right': `${(1 - FOCUS_REGION.x - FOCUS_REGION.width) * 100}%`,
   '--focus-bottom': `${(1 - FOCUS_REGION.y - FOCUS_REGION.height) * 100}%`,
   '--focus-left': `${FOCUS_REGION.x * 100}%`,
 } satisfies CSSProperties
+
+type PanelInteraction = {
+  type: 'move' | 'resize'
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startRect: CameraPanelRect
+}
 
 export default defineComponent({
   name: 'CameraScanner',
@@ -48,10 +76,22 @@ export default defineComponent({
       close,
     } = useCameraScanner(result => emit('scan', result))
 
+    const panel = ref<HTMLElement | null>(null)
+    const panelLayout = shallowRef<CameraPanelRect | null>(null)
+    const minimumFocusSize = shallowRef({
+      width: CAMERA_PANEL_MIN_CONTROL_WIDTH,
+      height: FALLBACK_MINIMUM_PANEL_SIZE.height,
+    })
+    const minimumPanelSize = shallowRef<CameraPanelSize>(FALLBACK_MINIMUM_PANEL_SIZE)
+    const isDraggingPanel = ref(false)
+    const isResizingPanel = ref(false)
     const displayedCode = shallowRef<DetectedCode | null>(null)
     let overlayTarget: DetectedCode | null = null
     let overlayAnimationFrame = 0
     let lastOverlayAnimationAt = 0
+    let panelLayoutFrame = 0
+    let panelInteraction: PanelInteraction | null = null
+    let hasUserResizedPanel = false
 
     watch(detectedCode, (code) => {
       overlayTarget = code
@@ -128,6 +168,45 @@ export default defineComponent({
       }
     })
 
+    const cameraPanelStyle = computed<CSSProperties>(() => {
+      const minimumSize = minimumPanelSize.value
+      const layout = panelLayout.value
+      const style = {
+        '--camera-panel-min-width': `${minimumSize.width}px`,
+        '--camera-panel-min-height': `${minimumSize.height}px`,
+      } satisfies CSSProperties
+
+      if (!layout) {
+        return style
+      }
+
+      return {
+        ...style,
+        top: `${layout.top}px`,
+        right: 'auto',
+        bottom: 'auto',
+        left: `${layout.left}px`,
+        width: `${layout.width}px`,
+        height: `${layout.height}px`,
+        marginInline: '0',
+      } satisfies CSSProperties
+    })
+
+    watch(isPanelOpen, (isOpen) => {
+      if (!isOpen) {
+        stopPanelInteraction()
+        return
+      }
+
+      void nextTick(syncPanelLayout)
+    }, { flush: 'post' })
+
+    watch(analysisError, () => {
+      if (isPanelOpen.value) {
+        void nextTick(syncPanelLayout)
+      }
+    }, { flush: 'post' })
+
     function requestOverlayAnimation(): void {
       if (overlayAnimationFrame === 0) {
         overlayAnimationFrame = requestAnimationFrame(animateOverlay)
@@ -167,7 +246,290 @@ export default defineComponent({
       lastOverlayAnimationAt = 0
     }
 
-    onBeforeUnmount(stopOverlayAnimation)
+    function syncPanelLayout(): void {
+      panelLayoutFrame = 0
+
+      if (!isPanelOpen.value) {
+        return
+      }
+
+      const element = panel.value
+      if (!element) {
+        return
+      }
+
+      updateMinimumPanelSize(element)
+      const nextLayout = panelLayout.value ?? readPanelRect(element)
+      panelLayout.value = clampCameraPanelRect(nextLayout, getPanelConstraints())
+    }
+
+    function requestPanelLayoutSync(): void {
+      if (!isPanelOpen.value || panelLayoutFrame !== 0) {
+        return
+      }
+
+      panelLayoutFrame = requestAnimationFrame(syncPanelLayout)
+    }
+
+    function updateMinimumPanelSize(element: HTMLElement): void {
+      const viewportElement = element.querySelector<HTMLElement>('.camera-viewport')
+
+      if (!viewportElement) {
+        return
+      }
+
+      const elementRect = element.getBoundingClientRect()
+      const viewportRect = viewportElement.getBoundingClientRect()
+      const chromeHeight = Math.max(0, elementRect.height - viewportRect.height)
+
+      if (!hasUserResizedPanel) {
+        minimumFocusSize.value = {
+          width: viewportRect.width * FOCUS_REGION.width,
+          height: viewportRect.height * FOCUS_REGION.height,
+        }
+      }
+
+      minimumPanelSize.value = getMinimumCameraPanelSizeFromFocus(
+        minimumFocusSize.value,
+        chromeHeight,
+      )
+    }
+
+    function getPanelConstraints(): CameraPanelConstraints {
+      return {
+        viewport: {
+          width: typeof window === 'undefined' ? 1 : window.innerWidth,
+          height: typeof window === 'undefined' ? 1 : window.innerHeight,
+        },
+        minimumSize: minimumPanelSize.value,
+        edgeGap: CAMERA_PANEL_EDGE_GAP,
+      }
+    }
+
+    function readPanelRect(element: HTMLElement): CameraPanelRect {
+      const rect = element.getBoundingClientRect()
+
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      }
+    }
+
+    function ensurePanelLayout(): CameraPanelRect | null {
+      const element = panel.value
+
+      if (!element) {
+        return null
+      }
+
+      updateMinimumPanelSize(element)
+      const nextLayout = clampCameraPanelRect(
+        panelLayout.value ?? readPanelRect(element),
+        getPanelConstraints(),
+      )
+      panelLayout.value = nextLayout
+
+      return nextLayout
+    }
+
+    function startPanelDrag(event: PointerEvent): void {
+      if (!shouldStartPanelPointerInteraction(event)) {
+        return
+      }
+
+      const startRect = ensurePanelLayout()
+
+      if (!startRect) {
+        return
+      }
+
+      panelInteraction = {
+        type: 'move',
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startRect,
+      }
+      isDraggingPanel.value = true
+      capturePanelPointer(event)
+      event.preventDefault()
+    }
+
+    function dragPanel(event: PointerEvent): void {
+      const interaction = panelInteraction
+
+      if (!interaction || interaction.type !== 'move' || interaction.pointerId !== event.pointerId) {
+        return
+      }
+
+      panelLayout.value = moveCameraPanelRect(
+        interaction.startRect,
+        {
+          x: event.clientX - interaction.startClientX,
+          y: event.clientY - interaction.startClientY,
+        },
+        getPanelConstraints(),
+      )
+      event.preventDefault()
+    }
+
+    function startPanelResize(event: PointerEvent): void {
+      if (!shouldStartPanelPointerInteraction(event, { allowInteractiveTarget: true })) {
+        return
+      }
+
+      const startRect = ensurePanelLayout()
+
+      if (!startRect) {
+        return
+      }
+
+      hasUserResizedPanel = true
+      panelInteraction = {
+        type: 'resize',
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startRect,
+      }
+      isResizingPanel.value = true
+      capturePanelPointer(event)
+      event.preventDefault()
+    }
+
+    function resizePanel(event: PointerEvent): void {
+      const interaction = panelInteraction
+
+      if (!interaction || interaction.type !== 'resize' || interaction.pointerId !== event.pointerId) {
+        return
+      }
+
+      panelLayout.value = resizeCameraPanelRect(
+        interaction.startRect,
+        {
+          x: event.clientX - interaction.startClientX,
+          y: event.clientY - interaction.startClientY,
+        },
+        getPanelConstraints(),
+      )
+      event.preventDefault()
+    }
+
+    function movePanelWithKeyboard(event: KeyboardEvent): void {
+      if (event.target !== event.currentTarget) {
+        return
+      }
+
+      const delta = getKeyboardDelta(event)
+
+      if (!delta) {
+        return
+      }
+
+      const startRect = ensurePanelLayout()
+
+      if (!startRect) {
+        return
+      }
+
+      panelLayout.value = moveCameraPanelRect(startRect, delta, getPanelConstraints())
+      event.preventDefault()
+    }
+
+    function resizePanelWithKeyboard(event: KeyboardEvent): void {
+      const delta = getKeyboardDelta(event)
+
+      if (!delta) {
+        return
+      }
+
+      const startRect = ensurePanelLayout()
+
+      if (!startRect) {
+        return
+      }
+
+      hasUserResizedPanel = true
+      panelLayout.value = resizeCameraPanelRect(startRect, delta, getPanelConstraints())
+      event.preventDefault()
+    }
+
+    function getKeyboardDelta(event: KeyboardEvent): { x: number, y: number } | null {
+      const step = event.shiftKey ? KEYBOARD_PANEL_FAST_STEP_PX : KEYBOARD_PANEL_STEP_PX
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          return { x: -step, y: 0 }
+        case 'ArrowRight':
+          return { x: step, y: 0 }
+        case 'ArrowUp':
+          return { x: 0, y: -step }
+        case 'ArrowDown':
+          return { x: 0, y: step }
+        default:
+          return null
+      }
+    }
+
+    function shouldStartPanelPointerInteraction(
+      event: PointerEvent,
+      options: { allowInteractiveTarget?: boolean } = {},
+    ): boolean {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return false
+      }
+
+      if (options.allowInteractiveTarget) {
+        return true
+      }
+
+      const target = event.target
+
+      return !(target instanceof Element && target.closest('button'))
+    }
+
+    function capturePanelPointer(event: PointerEvent): void {
+      if (event.currentTarget instanceof HTMLElement) {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }
+    }
+
+    function releasePanelPointer(event: PointerEvent): void {
+      if (
+        event.currentTarget instanceof HTMLElement
+        && event.currentTarget.hasPointerCapture(event.pointerId)
+      ) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    }
+
+    function finishPanelInteraction(event: PointerEvent): void {
+      if (!panelInteraction || panelInteraction.pointerId !== event.pointerId) {
+        return
+      }
+
+      releasePanelPointer(event)
+      stopPanelInteraction()
+    }
+
+    function stopPanelInteraction(): void {
+      panelInteraction = null
+      isDraggingPanel.value = false
+      isResizingPanel.value = false
+    }
+
+    onMounted(() => {
+      window.addEventListener('resize', requestPanelLayoutSync)
+    })
+
+    onBeforeUnmount(() => {
+      stopOverlayAnimation()
+      stopPanelInteraction()
+      cancelAnimationFrame(panelLayoutFrame)
+      window.removeEventListener('resize', requestPanelLayoutSync)
+    })
 
     return () => {
       const code = displayedCode.value
@@ -177,8 +539,26 @@ export default defineComponent({
         <Teleport to="#teleports">
           <Transition name="scanner-panel">
             {isPanelOpen.value && (
-              <section class="camera-panel" aria-label="Камера сканера">
-                <header class="camera-panel__header">
+              <section
+                ref={panel}
+                class={{
+                  'camera-panel': true,
+                  'camera-panel--dragging': isDraggingPanel.value,
+                  'camera-panel--resizing': isResizingPanel.value,
+                }}
+                style={cameraPanelStyle.value}
+                aria-label="Камера сканера"
+              >
+                <header
+                  class="camera-panel__header"
+                  tabindex={0}
+                  aria-label="Переместить окно камеры"
+                  onPointerdown={startPanelDrag}
+                  onPointermove={dragPanel}
+                  onPointerup={finishPanelInteraction}
+                  onPointercancel={finishPanelInteraction}
+                  onKeydown={movePanelWithKeyboard}
+                >
                   <div>
                     <span class={{ 'live-dot': true, 'live-dot--active': isActive.value }} />
                     <span>{statusText.value}</span>
@@ -240,6 +620,19 @@ export default defineComponent({
                 </div>
 
                 {analysisError.value && <p class="analysis-error">{analysisError.value}</p>}
+
+                <button
+                  type="button"
+                  class="camera-resize-handle"
+                  aria-label="Изменить размер окна камеры"
+                  onPointerdown={startPanelResize}
+                  onPointermove={resizePanel}
+                  onPointerup={finishPanelInteraction}
+                  onPointercancel={finishPanelInteraction}
+                  onKeydown={resizePanelWithKeyboard}
+                >
+                  <span aria-hidden="true" />
+                </button>
               </section>
             )}
           </Transition>

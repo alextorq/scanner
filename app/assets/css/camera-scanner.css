@@ -1,6 +1,10 @@
 .camera-panel {
   position: fixed;
   z-index: 20;
+  display: flex;
+  min-width: var(--camera-panel-min-width, 17rem);
+  min-height: var(--camera-panel-min-height, 13.75rem);
+  flex-direction: column;
   right: max(0.85rem, env(safe-area-inset-right));
   bottom: calc(9.7rem + env(safe-area-inset-bottom));
   left: max(0.85rem, env(safe-area-inset-left));
@@ -16,10 +20,28 @@
 .camera-panel__header {
   display: flex;
   height: 3.1rem;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   padding: 0 0.8rem 0 1rem;
   color: #f7f5f0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.camera-panel__header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -0.45rem;
+}
+
+.camera-panel--dragging .camera-panel__header {
+  cursor: grabbing;
+}
+
+.camera-panel--dragging,
+.camera-panel--resizing {
+  user-select: none;
 }
 
 .camera-panel__header > div {
@@ -50,6 +72,7 @@
   border: 0;
   border-radius: 50%;
   background: rgb(255 255 255 / 8%);
+  cursor: pointer;
 }
 
 .close-button span::before,
@@ -74,6 +97,8 @@
 .camera-viewport {
   position: relative;
   width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   aspect-ratio: 4 / 3;
   overflow: hidden;
   background: #0d0f0e;
@@ -245,11 +270,52 @@
 }
 
 .analysis-error {
+  flex: 0 0 auto;
   margin: 0;
   padding: 0.65rem 1rem;
   color: #ffc7bc;
   background: #331c19;
   font-size: 0.7rem;
+}
+
+.camera-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.camera-resize-handle span {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-right: 2px solid rgb(255 255 255 / 55%);
+  border-bottom: 2px solid rgb(255 255 255 / 55%);
+}
+
+.camera-resize-handle span::before {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  width: 0.48rem;
+  height: 0.48rem;
+  content: '';
+  border-right: 1px solid rgb(255 255 255 / 42%);
+  border-bottom: 1px solid rgb(255 255 255 / 42%);
+}
+
+.camera-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -0.35rem;
 }
 
 .scanner-dock {
